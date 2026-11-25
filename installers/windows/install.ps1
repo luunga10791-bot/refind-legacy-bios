@@ -1,17 +1,14 @@
-# Fail-closed entry point. Raw-sector installation is deliberately disabled
-# until repository-local Clover payloads and tested MBR/GPT layouts are supplied.
+# Fail-closed entry point. Raw-sector installation is not enabled yet.
 $ErrorActionPreference = 'Stop'
 Write-Host "rEFInd Legacy BIOS - Windows physical disk selector"
-Write-Host "This release is not yet authorized to write boot sectors."
-Write-Host "No disk has been modified."
+Write-Host "Boot-sector binaries are built from vendor\clover-bootsector."
+Write-Host "This installer is read-only; no disk will be modified."
 try {
   Get-Disk | Sort-Object Number | Format-Table Number, FriendlyName, SerialNumber, BusType, PartitionStyle, @{N='SizeGB';E={[math]::Round($_.Size/1GB,2)}} -AutoSize
 } catch {
   Write-Error "Cannot enumerate physical disks. Run in an elevated PowerShell window."
   exit 2
 }
-Write-Host ""
-Write-Host "Required repository payloads: payloads\DUET\boot6\boot, payloads\DUET\boot7\boot,"
-Write-Host "payloads\BootSectors\boot0ss and payloads\BootSectors\boot1f32."
-Write-Host "The installer remains read-only until safe, layout-specific sector writing is implemented and tested."
+Write-Host "Supported build outputs: boot0af, boot0ss, boot1f32, boot1f32alt."
+Write-Host "Sector writing is disabled pending verified MBR/GPT layout-specific logic."
 exit 3
