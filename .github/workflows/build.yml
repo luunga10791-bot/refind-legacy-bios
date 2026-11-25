@@ -1,31 +1,32 @@
 name: Build rEFInd Legacy BIOS boot sectors
-
 on:
   push:
     branches: ["**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   package:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout this repository only
         uses: actions/checkout@v4
-
       - name: Install NASM
         run: |
           sudo apt-get update
-          sudo apt-get install -y nasm make
-
+          sudo apt-get install -y nasm make zip
       - name: Build vendored Clover boot sectors
         working-directory: vendor/clover-bootsector
         run: bash ./build.sh
-
+      - name: Validate boot0 MBR code boundary
+        run: |
+          set -euo pipefail
+          for f in boot0af boot0ss; do
+            test "$(wc -c < "vendor/clover-bootsector/build/$f")" -eq 512
+            test "$(od -An -tx1 -j510 -N2 "vendor/clover-bootsector/build/$f" | tr -d ' \n')" = "55aa"
+          done
       - name: Assemble release packages
         shell: bash
         run: |
@@ -35,32 +36,38 @@ jobs:
           cp -R vendor/clover-bootsector dist/complete/source
           cp installers/windows/install.bat installers/windows/install.ps1 dist/complete/installers/
           cp installers/linux/install.sh dist/complete/installers/
-          cp installers/windows/install.bat dist/packages/install-windows.bat
-          cp installers/windows/install.ps1 dist/packages/install-windows.ps1
-          cp installers/linux/install.sh dist/packages/install-linux.sh
-          cat > dist/complete/README-INSTALLATION.txt <<'EOF'
-          Clover-derived MBR/FAT32 boot-sector components built from source in this repository.
-          No Clover DUET boot6/boot7 and no rEFInd EFI binary are included.
-          The Windows/Linux installer entry points are currently read-only safety previews.
-          MBR boot code and FAT32 PBR must be installed only after validating the target layout.
-          Preserve the original MBR partition table and the FAT32 BPB. Do not format the disk.
-          GPT legacy BIOS boot support depends on the exact partition layout and BIOS; test first.
-          EOF
+          mkdir -p dist/windows/payloads/BootSectors dist/linux/payloads/BootSectors
+          cp installers/windows/install.bat dist/windows/install.bat
+          cp installers/windows/install.ps1 dist/windows/install.ps1
+          cp installers/linux/install.sh dist/linux/install.sh
+          cp vendor/clover-bootsector/build/* dist/windows/payloads/BootSectors/
+          cp vendor/clover-bootsector/build/* dist/linux/payloads/BootSectors/
+          (cd dist && zip -qr packages/install-windows.zip windows)
+          tar -czf dist/packages/install-linux.tar.gz -C dist linux
           tar -czf dist/packages/refind-legacy-bios-bootsectors.tar.gz -C dist complete
+          cat > dist/packages/README-INSTALLATION.txt <<'EOF'
+          Windows: extract install-windows.zip, then run install.bat as administrator.
+          Linux: extract install-linux.tar.gz, then run sudo bash install.sh.
+          The installer writes only bytes 0-439 of MBR sector 0 and preserves bytes 440-511.
+          It creates a full-sector backup before writing and requires two typed confirmations.
+          Only 512-byte logical-sector disks with an existing MBR partition table are accepted.
+          Windows current boot/system disks and Linux root or mounted disks are refused.
+          boot1f32/boot1f32alt are built but are NOT installed by these scripts.
+          No Clover DUET boot6/boot7 or rEFInd EFI binary is included.
+          Test on disposable media/VMs first. GPT/BIOS compatibility depends on layout and firmware.
+          EOF
           (cd dist/packages && sha256sum * > SHA256SUMS.txt)
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: refind-legacy-bios-bootsectors-${{ github.sha }}
+          name: refind-legacy-bios-bootsectors-\${{ github.sha }}
           path: dist/packages/*
           if-no-files-found: error
           retention-days: 30
-
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: \${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/packages/* \
-            --title "${GITHUB_REF_NAME}" --generate-notes
+          gh release create "\${GITHUB_REF_NAME}" dist/packages/* \
+            --title "\${GITHUB_REF_NAME}" --generate-notes
