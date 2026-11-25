@@ -11,104 +11,51 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    runs-on: macos-latest
+  package:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout packaging repository
+      - name: Checkout this repository only
         uses: actions/checkout@v4
 
-      - name: Install NASM
-        run: brew install nasm p7zip
-
-      - name: Checkout CloverBootloader
-        uses: actions/checkout@v4
-        with:
-          repository: CloverHackyColor/CloverBootloader
-          ref: master
-          path: upstream/CloverBootloader
-          submodules: recursive
-          fetch-depth: 0
-
-      # Clover's own CI entry point calls makeRelease(), which builds boot7
-      # with -mc and then boot6 without -mc, and runs the packaging steps.
-      - name: Build Clover DUET boot6 and boot7
-        working-directory: upstream/CloverBootloader
+      - name: Validate repository-local payloads
         shell: bash
         run: |
           set -euo pipefail
-          chmod +x ./buildme ./ebuild.sh ./hebuild.sh
-          ./buildme "" ci
-
-      - name: Download rEFInd binary distribution
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist/staging/refind
-          curl --fail --location --retry 3 \
-            https://sourceforge.net/projects/refind/files/latest/download \
-            --output /tmp/refind-bin.zip
-          ditto -x -k /tmp/refind-bin.zip dist/staging/refind
-          REFIND_EFI="$(find dist/staging/refind -type f -iname 'refind_x64.efi' -print -quit)"
-          test -n "$REFIND_EFI"
-          REFIND_DIR="$(dirname "$REFIND_EFI")"
-          mkdir -p dist/EFI/BOOT
-          cp "$REFIND_EFI" dist/EFI/BOOT/BOOTX64.EFI
-          if [ -d "$REFIND_DIR/drivers_x64" ]; then
-            cp -R "$REFIND_DIR/drivers_x64" dist/EFI/BOOT/
-          fi
-          if [ -d "$REFIND_DIR/icons" ]; then
-            cp -R "$REFIND_DIR/icons" dist/EFI/BOOT/
-          fi
-          if [ -f "$REFIND_DIR/refind.conf-sample" ]; then
-            cp "$REFIND_DIR/refind.conf-sample" dist/EFI/BOOT/refind.conf
-          fi
-
-      - name: Collect Clover bootloaders and boot-sector components
-        working-directory: upstream/CloverBootloader
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p ../../dist/DUET/boot6 ../../dist/DUET/boot7 ../../dist/BootSectors
-          PKG_DIR="$PWD/CloverPackage"
-          test -d "$PKG_DIR"
-          BOOT6="$(find "$PKG_DIR" -type f -path '*/Bootloaders/x64/boot6' -print -quit)"
-          BOOT7="$(find "$PKG_DIR" -type f -path '*/Bootloaders/x64/boot7' -print -quit)"
-          test -n "$BOOT6"
-          test -n "$BOOT7"
-          cp "$BOOT6" ../../dist/DUET/boot6/boot
-          cp "$BOOT7" ../../dist/DUET/boot7/boot
-          BOOTSECTORS="$(find "$PKG_DIR" -type d -name BootSectors -print -quit)"
-          test -n "$BOOTSECTORS"
-          cp "$BOOTSECTORS"/boot* ../../dist/BootSectors/
-          for f in Description.txt Installation.txt; do
-            [ ! -f "$BOOTSECTORS/$f" ] || cp "$BOOTSECTORS/$f" ../../dist/BootSectors/
+          required=(
+            payloads/DUET/boot6/boot
+            payloads/DUET/boot7/boot
+            payloads/BootSectors/boot0ss
+            payloads/BootSectors/boot1f32
+          )
+          for file in "${required[@]}"; do
+            if [ ! -s "$file" ]; then
+              echo "::error::Missing repository payload: $file"
+              exit 1
+            fi
           done
 
-      - name: Write package notes and archives
+      - name: Assemble release packages
         shell: bash
         run: |
           set -euo pipefail
-          cat > dist/README-INSTALLATION.txt <<'EOF'
-          Experimental payload package only; no automatic disk installer is provided.
-          DUET boot6 and boot7 are separate alternatives, not files to rename interchangeably.
-          Boot-sector files are upstream Clover components. Their presence does not certify
-          a particular MBR/GPT layout. boot1f32 is a FAT32 partition boot sector.
-          Back up sectors before manual installation. Preserve the MBR partition table and
-          preserve the FAT32 BPB when replacing a FAT32 PBR. Never write a whole 512-byte
-          sector blindly to a physical disk.
-          rEFInd is staged as EFI/BOOT/BOOTX64.EFI for the EFI application stage.
-          Validate on a disposable disk image and in a BIOS virtual machine before use.
+          mkdir -p dist/packages dist/complete
+          cp -R payloads dist/complete/
+          mkdir -p dist/complete/installers
+          cp installers/windows/install.bat installers/windows/install.ps1 dist/complete/installers/
+          cp installers/linux/install.sh dist/complete/installers/
+          cat > dist/complete/README-INSTALLATION.txt <<'EOF'
+          Repository-local experimental boot payloads and disk-selection installers.
+          No rEFInd EFI binary is included. Download rEFInd separately and place
+          refind_x64.efi at EFI/BOOT/BOOTX64.EFI on the EFI System Partition.
+          The installer scripts validate and back up before any raw-sector write.
+          MBR and GPT require different layouts; a payload alone does not guarantee
+          legacy BIOS boot on GPT. Test with disposable media first.
           EOF
-          mkdir -p dist/packages
-          ditto -c -k --sequesterRsrc dist/EFI dist/packages/refind-efi-x64.zip
-          ditto -c -k --sequesterRsrc dist/DUET/boot6 dist/packages/duet-boot6.zip
-          ditto -c -k --sequesterRsrc dist/DUET/boot7 dist/packages/duet-boot7.zip
-          ditto -c -k --sequesterRsrc dist/BootSectors dist/packages/clover-bootsector-components.zip
-          mkdir -p dist/complete
-          cp -R dist/EFI dist/DUET dist/BootSectors dist/README-INSTALLATION.txt dist/complete/
-          ditto -c -k --sequesterRsrc dist/complete /tmp/refind-legacy-bios-complete.zip
-          mv /tmp/refind-legacy-bios-complete.zip dist/packages/
-          shasum -a 256 dist/packages/*.zip > dist/packages/SHA256SUMS.txt
+          cp installers/windows/install.bat dist/packages/install-windows.bat
+          cp installers/windows/install.ps1 dist/packages/install-windows.ps1
+          cp installers/linux/install.sh dist/packages/install-linux.sh
+          tar -czf dist/packages/refind-legacy-bios-payloads.tar.gz -C dist complete
+          (cd dist/packages && sha256sum * > SHA256SUMS.txt)
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -124,5 +71,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" dist/packages/* \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes
+            --title "${GITHUB_REF_NAME}" --generate-notes
