@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install NASM
-        run: brew install nasm
+        run: brew install nasm p7zip
 
       - name: Checkout CloverBootloader
         uses: actions/checkout@v4
@@ -104,7 +104,10 @@ jobs:
           ditto -c -k --sequesterRsrc dist/DUET/boot6 dist/packages/duet-boot6.zip
           ditto -c -k --sequesterRsrc dist/DUET/boot7 dist/packages/duet-boot7.zip
           ditto -c -k --sequesterRsrc dist/BootSectors dist/packages/clover-bootsector-components.zip
-          ditto -c -k --sequesterRsrc dist dist/packages/refind-legacy-bios-complete.zip
+          mkdir -p dist/complete
+          cp -R dist/EFI dist/DUET dist/BootSectors dist/README-INSTALLATION.txt dist/complete/
+          ditto -c -k --sequesterRsrc dist/complete /tmp/refind-legacy-bios-complete.zip
+          mv /tmp/refind-legacy-bios-complete.zip dist/packages/
           shasum -a 256 dist/packages/*.zip > dist/packages/SHA256SUMS.txt
 
       - name: Upload build artifact
