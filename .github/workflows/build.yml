@@ -42,8 +42,8 @@ jobs:
           cp installers/linux/install.sh dist/linux/install.sh
           cp vendor/clover-bootsector/build/* dist/windows/payloads/BootSectors/
           cp vendor/clover-bootsector/build/* dist/linux/payloads/BootSectors/
-          (cd dist && zip -qr packages/install-windows.zip windows)
-          tar -czf dist/packages/install-linux.tar.gz -C dist linux
+          (cd dist/windows && zip -qr ../packages/install-windows.zip .)
+          tar -czf dist/packages/install-linux.tar.gz -C dist/linux .
           tar -czf dist/packages/refind-legacy-bios-bootsectors.tar.gz -C dist complete
           cat > dist/packages/README-INSTALLATION.txt <<'EOF'
           Windows: extract install-windows.zip, then run install.bat as administrator.
