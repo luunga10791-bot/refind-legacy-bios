@@ -24,7 +24,7 @@ jobs:
 
       - name: Build vendored Clover boot sectors
         working-directory: vendor/clover-bootsector
-        run: ./build.sh
+        run: bash ./build.sh
 
       - name: Assemble release packages
         shell: bash
