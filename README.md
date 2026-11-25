@@ -1,28 +1,34 @@
 # rEFInd Legacy BIOS (Clover DUET)
 
-Experimental packaging project for the chain:
+Experimental, repository-local packaging for a Legacy BIOS → boot-sector → Clover DUET → rEFInd chain.
 
-`Legacy BIOS → MBR/PBR boot code → Clover DUET (boot6 or boot7) → rEFInd x64 EFI application`.
+## Release contents
 
-## Build variants
+- Windows launcher: `install-windows.bat` and PowerShell implementation.
+- Linux installer: `install-linux.sh`.
+- Clover DUET boot6 and boot7 payloads and boot-sector components stored under `payloads/`.
+- **No `refind.efi` is bundled.** Download rEFInd separately and copy its x64 EFI application to `EFI/BOOT/BOOTX64.EFI` on the EFI System Partition.
 
-- **DUET boot6**: CloverEFI x64 using the normal BIOS access path.
-- **DUET boot7**: CloverEFI x64 using BIOS Block I/O (MCP compatibility path).
-- **Boot-sector payloads**: Clover-generated MBR and FAT32 PBR binaries available from upstream.
-- **rEFInd**: x64 EFI application staged at `EFI/BOOT/BOOTX64.EFI`.
+## Disk selection and safety
 
-These are payloads, not an installer or a ready-to-write disk image. They do not guarantee that every MBR/GPT partition layout is bootable. In particular, `boot1f32` is for FAT32 PBR booting, not a universal GPT boot sector. Never overwrite a disk's MBR/PBR without backing it up and preserving its partition table and FAT32 BPB.
+The Windows installer enumerates physical disks as `PhysicalDriveN`; Linux enumerates block devices such as `/dev/sda` and prefers stable `/dev/disk/by-id/` names. The intended workflow is to show disk model/size/partitions, require an explicit typed confirmation, back up sectors, and refuse unsupported layouts. It must never format a disk or overwrite an entire MBR/PBR sector without preserving partition metadata/BPB.
 
-## CI
+**Important:** MBR and GPT are not interchangeable. Clover FAT32 PBR components are not universal GPT boot code. The current scripts are fail-closed until the required, reviewed binary payloads are present; do not treat the package as a validated one-click installer until MBR and GPT have each passed disposable-disk BIOS tests.
 
-Push, pull request, or manual dispatch builds an artifact. Pushing a tag matching `v*` is intended to publish a GitHub Release. The first workflow run is an integration test; upstream build and distribution changes may require maintenance.
+## Repository-only CI
 
-## Upstream projects
+GitHub Actions checks out this repository only. It does not clone CloverBootloader, download rEFInd, or fetch third-party build inputs. Consequently, the binary files below must be committed into this repository before a Release can be packaged:
 
-- [CloverBootloader](https://github.com/CloverHackyColor/CloverBootloader)
-- [rEFInd](https://github.com/rhboot/refind)
-- [rEFInd documentation](https://www.rodsbooks.com/refind/)
+```
+payloads/
+  DUET/boot6/boot
+  DUET/boot7/boot
+  BootSectors/boot0ss
+  BootSectors/boot1f32
+```
+
+Keep upstream license and provenance notices alongside imported binaries. The workflow intentionally fails if required payloads are absent rather than silently publishing incomplete assets.
 
 ## Licensing
 
-This repository contains build and packaging glue. CloverBootloader and rEFInd retain their respective upstream licenses; consult those projects for their full terms.
+CloverBootloader components retain their upstream license. See the relevant upstream notices before redistributing binaries. rEFInd is distributed separately by its own project.
