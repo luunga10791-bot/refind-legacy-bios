@@ -1,23 +1,12 @@
-# Boot-sector components and installation safety
+# Boot-sector installation safety
 
-This project publishes Clover's boot-sector binaries as reference payloads. It deliberately does not provide a script that writes raw sectors to a physical disk.
+This repository's installer entry points are fail-closed until reviewed payloads and disk-layout-specific write logic are present. They must not guess partition offsets or write raw sectors based only on a disk number.
 
-## MBR and GPT are not interchangeable boot-sector formats
+- MBR boot code shares sector 0 with the partition table. Preserve bytes 446–509 and the signature when updating only boot code.
+- GPT includes a protective MBR, GPT headers and partition-entry arrays. Legacy BIOS boot on GPT requires a deliberately supported layout and firmware path; do not treat an MBR payload as generic GPT support.
+- FAT32 PBR replacement must preserve the existing BPB and filesystem metadata. Never blindly overwrite a full 512-byte PBR.
+- Back up the exact sectors before writes, display disk identity and layout, require typed confirmation, and abort for the system/root disk or unsupported filesystems.
+- Never format, repartition, or modify GPT metadata automatically.
+- Validate each boot6/boot7 + MBR/GPT combination in disposable disk images and BIOS-mode virtual machines before enabling writes.
 
-- An MBR disk has executable code in the MBR's boot-code area and a partition table in the same 512-byte sector. Replacing the entire sector can destroy the partition table.
-- GPT disks normally retain a protective MBR, GPT headers and partition-entry arrays. Legacy BIOS booting from GPT additionally depends on firmware, boot code and a supported partition/filesystem arrangement. A boot-sector binary alone does not make arbitrary GPT layouts bootable.
-- A FAT32 partition boot sector (PBR) is not the same thing as an MBR. Clover's `boot1f32` / `boot1f32alt` are FAT32-oriented partition boot components, not generic GPT installers.
-
-## FAT32 BPB preservation
-
-When replacing a FAT32 PBR, preserve the existing volume's BIOS Parameter Block (BPB). Clover's own installation notes describe copying the BPB region from the original sector; do not blindly write a complete 512-byte template over an existing filesystem boot sector.
-
-## Required validation before real hardware
-
-1. Use a disposable virtual disk image, never the only copy of important data.
-2. Test MBR and GPT layouts separately in a BIOS-mode virtual machine.
-3. Test boot6 and boot7 as separate DUET variants.
-4. Confirm the DUET stage can locate and load the rEFInd EFI application.
-5. Record firmware settings, partition layout, filesystem and exact boot-sector variant for every successful test.
-
-Until these tests are automated and passing, release artifacts should be treated as experimental components, not a validated installer or turnkey boot disk.
+The release does not include rEFInd. The user supplies the EFI application separately.
