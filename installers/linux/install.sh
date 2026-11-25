@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 die() { echo "ERROR: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "Run with sudo."
-SCRIPT_DIR="$(cd -- "$(dirname -- "\${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 find_binary() {
   local name="$1" candidate
   for candidate in "$SCRIPT_DIR/payloads/BootSectors/$name" "$SCRIPT_DIR/../../payloads/BootSectors/$name" "$SCRIPT_DIR/../payloads/BootSectors/$name"; do
