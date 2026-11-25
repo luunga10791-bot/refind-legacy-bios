@@ -60,14 +60,14 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: refind-legacy-bios-bootsectors-\${{ github.sha }}
+          name: refind-legacy-bios-bootsectors-${{ github.sha }}
           path: dist/packages/*
           if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "\${GITHUB_REF_NAME}" dist/packages/* \
-            --title "\${GITHUB_REF_NAME}" --generate-notes
+          gh release create "${GITHUB_REF_NAME}" dist/packages/* \
+            --title "${GITHUB_REF_NAME}" --generate-notes
