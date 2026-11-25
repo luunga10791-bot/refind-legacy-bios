@@ -1,4 +1,4 @@
-name: Build rEFInd Legacy BIOS
+name: Build rEFInd Legacy BIOS boot sectors
 
 on:
   push:
@@ -17,50 +17,42 @@ jobs:
       - name: Checkout this repository only
         uses: actions/checkout@v4
 
-      - name: Validate repository-local payloads
-        shell: bash
+      - name: Install NASM
         run: |
-          set -euo pipefail
-          required=(
-            payloads/DUET/boot6/boot
-            payloads/DUET/boot7/boot
-            payloads/BootSectors/boot0ss
-            payloads/BootSectors/boot1f32
-          )
-          for file in "${required[@]}"; do
-            if [ ! -s "$file" ]; then
-              echo "::error::Missing repository payload: $file"
-              exit 1
-            fi
-          done
+          sudo apt-get update
+          sudo apt-get install -y nasm make
+
+      - name: Build vendored Clover boot sectors
+        working-directory: vendor/clover-bootsector
+        run: ./build.sh
 
       - name: Assemble release packages
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist/packages dist/complete
-          cp -R payloads dist/complete/
-          mkdir -p dist/complete/installers
+          mkdir -p dist/packages dist/complete/payloads/BootSectors dist/complete/installers
+          cp vendor/clover-bootsector/build/* dist/complete/payloads/BootSectors/
+          cp -R vendor/clover-bootsector dist/complete/source
           cp installers/windows/install.bat installers/windows/install.ps1 dist/complete/installers/
           cp installers/linux/install.sh dist/complete/installers/
-          cat > dist/complete/README-INSTALLATION.txt <<'EOF'
-          Repository-local experimental boot payloads and disk-selection installers.
-          No rEFInd EFI binary is included. Download rEFInd separately and place
-          refind_x64.efi at EFI/BOOT/BOOTX64.EFI on the EFI System Partition.
-          The installer scripts validate and back up before any raw-sector write.
-          MBR and GPT require different layouts; a payload alone does not guarantee
-          legacy BIOS boot on GPT. Test with disposable media first.
-          EOF
           cp installers/windows/install.bat dist/packages/install-windows.bat
           cp installers/windows/install.ps1 dist/packages/install-windows.ps1
           cp installers/linux/install.sh dist/packages/install-linux.sh
-          tar -czf dist/packages/refind-legacy-bios-payloads.tar.gz -C dist complete
+          cat > dist/complete/README-INSTALLATION.txt <<'EOF'
+          Clover-derived MBR/FAT32 boot-sector components built from source in this repository.
+          No Clover DUET boot6/boot7 and no rEFInd EFI binary are included.
+          The Windows/Linux installer entry points are currently read-only safety previews.
+          MBR boot code and FAT32 PBR must be installed only after validating the target layout.
+          Preserve the original MBR partition table and the FAT32 BPB. Do not format the disk.
+          GPT legacy BIOS boot support depends on the exact partition layout and BIOS; test first.
+          EOF
+          tar -czf dist/packages/refind-legacy-bios-bootsectors.tar.gz -C dist complete
           (cd dist/packages && sha256sum * > SHA256SUMS.txt)
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: refind-legacy-bios-${{ github.sha }}
+          name: refind-legacy-bios-bootsectors-${{ github.sha }}
           path: dist/packages/*
           if-no-files-found: error
           retention-days: 30
